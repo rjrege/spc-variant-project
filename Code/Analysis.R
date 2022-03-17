@@ -1,6 +1,8 @@
 library(dplyr)
 library(vcfR)
 library(data.table)
+library(ggplot2) ## geom_time
+library(tidyr) ## pivot_longer
 
 ## Interested in Family I73T: Samples DV02-DV06
 setwd("L:/medex/askol/Hamvas/NUSeqData/Hamvas01")
@@ -17,7 +19,7 @@ names(u)[ncol(u) + 1 - length(ids):1] <- ids
 ## probably want to use files in Mol"Dx_Alamut_Annotated/
 files <- dir("MolDx_Alamut_Annotated/", full.names = TRUE)
 
-genesInterest <- read.table("../ListofRelevantProteinsandGenes-RR2-4-22.txt", as.is=TRUE)
+genesInterest <- read.table("C:/Users/askol/Dropbox/GitHub/spc-variant-project/ListofRelevantProteinsandGenes-RR3-17-22.txt", as.is=TRUE)
 genesInterest <- unlist(genesInterest)
 allData <- c()
 
@@ -47,11 +49,65 @@ uFiltered <- uFiltered %>% select(chrom, inputPos, inputRef, inputAlt, gene, var
 for (id in ids[2:6]){
   
   newColName = paste0(id,"_geno")
-  uFiltered <- uFiltered %>% mutate(!!as.name(newColName) = getGene(!!as.name(id)))
+  uFiltered <- uFiltered %>% mutate(!!as.name(newColName) := getGene(!!as.name(id)))
+}
+
+input <-  uFiltered %>% select(gnomadAltFreq_all, DV02_geno:DV06_geno)
+input <- input %>% mutate(gnomadAltFreq_all =
+                                ifelse(is.na(gnomadAltFreq_all), 0, gnomadAltFreq_all))
+ind <- which(rowSums(is.na(input[,-1])) == (ncol(input)-1) )
+input <- input[-ind, ]
+
+weights <- as.numeric(uFiltered$CADD_phred[-ind])
+weights <- weights / sum(weights, na.rm=T)
+
+Scores <- calcGenoScore(input, freqCutoffs = c(.01, .05, .1, .2))
+
+getGene <- function(x){
+
+    tranTable <- rbind( c("0/0", 0), c("0/1", 1), c("1/1", 2))
+    geno <- gsub(":.+", "", x)
+    for (i in 1:nrow(tranTable)){
+
+        ind <- which(geno == tranTable[i,1])
+        geno[ind] <- as.numeric(tranTable[i,2])
+    }
+    return(geno)
 }
 
 
-getGene <- function(x){
-  
-  geno <- gsub(":.+", "", x)
+calcGenoScore <- function(x, freqCutoffs, weights=c()){
+
+    scores <- c()
+ 
+    for (freq in freqCutoffs){
+        
+        z <- x %>% filter(gnomadAltFreq_all <= freq)
+        if (length(weights) == nrow(x) ){
+            w <- weights[x$gnomadAltFreq_all <= freq]
+            w <- kronecker(w, t(rep(1, ncol(z)-1)))
+        }
+        
+        if (nrow(z) > 0){
+            sc <- z %>% select(-gnomadAltFreq_all)
+            sc <- apply(sc, 2, as.numeric)
+            if (length(weights) > 0){
+                sc <- 1 * (sc > 0) * w
+            }
+            sc <- colSums(sc, na.rm=T)
+            scores <- rbind(scores, c(freq, sc))
+        }else{
+            scores <- rbind(scores, c(freq, rep(0, ncol(x) - 1)))
+        }
+    }
+        
+    return(scores)
+}
+    
+
+showGenos <- function(x){
+    
+    p <- ggplot(data = x, aes()) + geom_tile()
+
+    return(p)
 }
