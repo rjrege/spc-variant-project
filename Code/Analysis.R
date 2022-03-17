@@ -36,7 +36,7 @@ for (file in files){
 }
 
 allData <- unique(allData)
-allData <- allData %>% mutate(chrom = paste0("chr",chrom))
+allData <- allData %>% mutate(chrom = paste0("chr",chrom)) %>% filter(varLocation =="exon") %>% filter(codingEffect != "synonymous")
 
 
 uFiltered <- left_join(allData, u, by = c("chrom"="Chr", "inputPos"="Start", "inputRef"="Ref", "inputAlt"="Alt"))
