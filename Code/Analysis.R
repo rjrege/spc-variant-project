@@ -1,8 +1,8 @@
 library(dplyr)
 library(vcfR)
 library(data.table)
-library(ggplot2) ## geom_time
-library(tidyr) ## pivot_longer
+library(tidyverse)
+library(ggtext)
 
 ## Interested in Family I73T: Samples DV02-DV06
 setwd("L:/medex/askol/Hamvas/NUSeqData/Hamvas01")
@@ -63,6 +63,19 @@ weights <- weights / sum(weights, na.rm=T)
 
 Scores <- calcGenoScore(input, freqCutoffs = c(.01, .05, .1, .2))
 
+## Show Genotypes
+genotypes_data <- uFiltered %>% select(inputRef, inputAlt, gene, gnomadAltFreq_all, DV02_geno:DV06_geno) %>% mutate(varName = paste(gene, inputRef, inputAlt, sep = "")) %>% select(varName, gnomadAltFreq_all, DV02_geno:DV06_geno)
+genotypes_data <- genotypes_data %>% mutate(gnomadAltFreq_all = ifelse(is.na(gnomadAltFreq_all), 0, gnomadAltFreq_all))
+na_geno_indices <- which(rowSums(is.na(genotypes_data[,-1])) == (ncol(genotypes_data)-2) )
+genotypes_data = genotypes_data[-na_geno_indices, ]
+
+genotypes_data <- genotypes_data %>%
+  pivot_longer(cols = starts_with("DV"), names_to = "DV_genotypes", values_to = "genotype") %>%
+  mutate(DV_genotypes = as.character(DV_genotypes), genotype = as.character(genotype))
+
+
+showGenos(genotypes_data)
+
 getGene <- function(x){
 
     tranTable <- rbind( c("0/0", 0), c("0/1", 1), c("1/1", 2))
@@ -107,7 +120,8 @@ calcGenoScore <- function(x, freqCutoffs, weights=c()){
 
 showGenos <- function(x){
     
-    p <- ggplot(data = x, aes()) + geom_tile()
-
-    return(p)
+  p <- ggplot(data = a, aes(x = varName, y = DV_genotypes, size = genotype, color = gnomadAltFreq_all)) + geom_point() + theme(axis.text.x = element_markdown(angle=90))
+  
+  
+  return(p)
 }
